@@ -513,6 +513,44 @@ fn add_stakes(
         .sum::<u64>()
 }
 
+fn add_placeholder_stakes(
+    genesis_config: &mut GenesisConfig,
+    staker_infos: &[StakerInfo],
+    unlock_info: &UnlockInfo,
+    granularity: u64,
+) -> u64 {
+    staker_infos
+        .iter()
+        .map(|staker_info| {
+            if staker_info.staker == "P1aceHo1derPubkey11111111111111111111111111" {
+                create_and_add_stakes(genesis_config, staker_info, unlock_info, granularity)
+            }
+            else {
+                0
+            }
+        })
+        .sum::<u64>()
+}
+
+fn add_non_placeholder_stakes(
+    genesis_config: &mut GenesisConfig,
+    staker_infos: &[StakerInfo],
+    unlock_info: &UnlockInfo,
+    granularity: u64,
+) -> u64 {
+    staker_infos
+        .iter()
+        .map(|staker_info| {
+            if staker_info.staker == "P1aceHo1derPubkey11111111111111111111111111" {
+                0
+            }
+            else {
+                create_and_add_stakes(genesis_config, staker_info, unlock_info, granularity)
+            }
+        })
+        .sum::<u64>()
+}
+
 pub const VALIDATOR_INFOS: &[ValidatorInfo] = &[
     ValidatorInfo {
         name: "01Node",
@@ -732,6 +770,69 @@ pub fn add_genesis_accounts(genesis_config: &mut GenesisConfig) -> u64 {
         + add_spare_validators(genesis_config)
 }
 
+pub fn add_validators_genesis_accounts(genesis_config: &mut GenesisConfig) -> u64 {
+        add_validators(genesis_config, &VALIDATOR_INFOS)
+        + add_spare_validators(genesis_config)
+}
+
+pub fn add_placeholder_genesis_accounts(genesis_config: &mut GenesisConfig) -> u64 {
+    add_placeholder_stakes(
+        genesis_config,
+        &BATCH_ONE_STAKER_INFOS,
+        &UNLOCKS_BY_FIFTHS_FOR_30_MONTHS,
+        sol_to_lamports(1_000_000.0),
+    ) + add_placeholder_stakes(
+        genesis_config,
+        &BATCH_TWO_STAKER_INFOS,
+        &UNLOCKS_BY_FIFTHS_FOR_30_MONTHS,
+        sol_to_lamports(1_000_000.0),
+    ) + add_placeholder_stakes(
+        genesis_config,
+        &BATCH_THREE_STAKER_INFOS,
+        &UNLOCKS_BY_FIFTHS_FOR_30_MONTHS,
+        sol_to_lamports(1_000_000.0),
+    ) + add_placeholder_stakes(
+        genesis_config,
+        &BATCH_FOUR_STAKER_INFOS,
+        &UNLOCKS_BY_FIFTHS_FOR_30_MONTHS,
+        sol_to_lamports(1_000_000.0),
+    ) + add_placeholder_stakes(
+        genesis_config,
+        &POOL_STAKER_INFOS,
+        &UNLOCKS_BY_TENTHS_FOR_60_MONTHS,
+        sol_to_lamports(1_000_000.0),
+    )
+}
+
+pub fn add_non_placeholder_genesis_accounts(genesis_config: &mut GenesisConfig) -> u64 {
+    add_non_placeholder_stakes(
+        genesis_config,
+        &BATCH_ONE_STAKER_INFOS,
+        &UNLOCKS_BY_FIFTHS_FOR_30_MONTHS,
+        sol_to_lamports(1_000_000.0),
+    ) + add_non_placeholder_stakes(
+        genesis_config,
+        &BATCH_TWO_STAKER_INFOS,
+        &UNLOCKS_BY_FIFTHS_FOR_30_MONTHS,
+        sol_to_lamports(1_000_000.0),
+    ) + add_non_placeholder_stakes(
+        genesis_config,
+        &BATCH_THREE_STAKER_INFOS,
+        &UNLOCKS_BY_FIFTHS_FOR_30_MONTHS,
+        sol_to_lamports(1_000_000.0),
+    ) + add_non_placeholder_stakes(
+        genesis_config,
+        &BATCH_FOUR_STAKER_INFOS,
+        &UNLOCKS_BY_FIFTHS_FOR_30_MONTHS,
+        sol_to_lamports(1_000_000.0),
+    ) + add_non_placeholder_stakes(
+        genesis_config,
+        &POOL_STAKER_INFOS,
+        &UNLOCKS_BY_TENTHS_FOR_60_MONTHS,
+        sol_to_lamports(1_000_000.0),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -750,4 +851,43 @@ mod tests {
 
         assert_eq!(issued_lamports, lamports);
     }
+
+    #[test]
+    fn test_account_totals() {
+        let mut genesis_config = GenesisConfig::default();
+
+        let issued_lamports = add_genesis_accounts(&mut genesis_config);
+
+        assert_eq!(issued_lamports, sol_to_lamports(500_000_000.0));
+    }
+
+    #[test]
+    fn test_stake_account_totals() {
+        let mut genesis_config = GenesisConfig::default();
+
+        let issued_lamports =
+            add_non_placeholder_genesis_accounts(&mut genesis_config) +
+            add_placeholder_genesis_accounts(&mut genesis_config);
+
+        assert_eq!(issued_lamports, sol_to_lamports(500_000_000.0));
+    }
+
+    #[test]
+    fn test_placeholder_stake_account_totals() {
+        let mut genesis_config = GenesisConfig::default();
+
+        let issued_lamports = add_placeholder_genesis_accounts(&mut genesis_config);
+
+        assert_eq!(issued_lamports, sol_to_lamports(500_000_000.0));
+    }
+
+    #[test]
+    fn test_non_placeholder_stake_account_totals() {
+        let mut genesis_config = GenesisConfig::default();
+
+        let issued_lamports = add_non_placeholder_genesis_accounts(&mut genesis_config);
+
+        assert_eq!(issued_lamports, sol_to_lamports(500_000_000.0));
+    }
+
 }
