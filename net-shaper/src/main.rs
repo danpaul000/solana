@@ -346,7 +346,7 @@ fn identify_my_partition(partitions: &[u8], index: u64, size: u64) -> usize {
     let mut watermark = 0;
     for (i, p) in partitions.iter().enumerate() {
         watermark += *p;
-        if u64::from(watermark) >= index * 100 / size {
+        if u64::from(watermark) > index * 100 / size {
             my_partition = i;
             break;
         }
@@ -456,7 +456,7 @@ fn cleanup_network(matches: &ArgMatches) {
 
     assert!(my_index < network_size);
 
-    let my_partition = identify_my_partition(&topology.partitions, my_index, network_size);
+    let my_partition = identify_my_partition(&topology.partitions, my_index + 1, network_size);
     println!("My partition is {}", my_partition);
 
     topology.interconnects.iter().for_each(|i| {
