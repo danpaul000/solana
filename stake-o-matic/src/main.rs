@@ -6,6 +6,7 @@ use solana_clap_utils::{
 };
 use solana_client::{rpc_client::RpcClient, rpc_response::RpcVoteAccountInfo};
 use solana_metrics::datapoint_info;
+use solana_notifier::Notifier;
 use solana_sdk::{
     account_utils::StateMut,
     clock::Slot,
@@ -24,7 +25,7 @@ use std::{
 
 struct Config {
     json_rpc_url: String,
-    metrics_cluster_name: String,
+    cluster_name: String,
     source_stake_address: Pubkey,
     authorized_staker: Keypair,
 
@@ -139,7 +140,7 @@ fn get_config() -> Config {
         })
         .collect::<HashSet<_>>();
 
-    let metrics_cluster_name = if json_rpc_url.contains("mainnet-beta.solana.com") {
+    let cluster_name = if json_rpc_url.contains("mainnet-beta.solana.com") {
         "mainnet-beta"
     } else if json_rpc_url.contains("testnet.solana.com") {
         "testnet"
@@ -152,7 +153,7 @@ fn get_config() -> Config {
 
     let config = Config {
         json_rpc_url,
-        metrics_cluster_name,
+        cluster_name,
         source_stake_address,
         authorized_staker,
         whitelist,
@@ -262,7 +263,7 @@ fn transact(
     dry_run: bool,
     transactions: Vec<(Transaction, String)>,
     authorized_staker: &Keypair,
-) -> Result<Vec<(bool, String)>, Box<dyn error::Error>> {
+) -> Result<Vec<(bool, Signature, String)>, Box<dyn error::Error>> {
     let (blockhash, fee_calculator) = rpc_client.get_recent_blockhash()?;
 
     let authorized_staker_balance = rpc_client.get_balance(&authorized_staker.pubkey())?;
@@ -295,7 +296,7 @@ fn transact(
             Ok(signature) => pending_transactions.push((signature, memo)),
             Err(err) => {
                 error!("Failed to send transaction: {}", err);
-                finalized_transactions.push((false, memo));
+                finalized_transactions.push((false, signature, memo));
             }
         }
     }
@@ -315,9 +316,13 @@ fn transact(
             .get_fee_calculator_for_blockhash(&blockhash)?
             .is_none()
         {
-            error!("Blockhash {} expired", blockhash);
-            for (_signature, memo) in pending_transactions.into_iter() {
-                finalized_transactions.push((false, memo));
+            error!(
+                "Blockhash {} expired with {} pending transactions",
+                blockhash,
+                pending_transactions.len()
+            );
+            for (signature, memo) in pending_transactions.into_iter() {
+                finalized_transactions.push((false, signature, memo));
             }
             break;
         }
@@ -338,7 +343,7 @@ fn transact(
             trace!("{} - {:?}", signature, status);
             if let Some(status) = status {
                 if status.confirmations.is_none() {
-                    finalized_transactions.push((status.err.is_none(), memo));
+                    finalized_transactions.push((status.err.is_none(), signature, memo));
                     continue;
                 }
             }
@@ -354,6 +359,8 @@ fn transact(
 fn main() -> Result<(), Box<dyn error::Error>> {
     solana_logger::setup_with_default("solana=info");
     let config = get_config();
+
+    let notifier = Notifier::default();
 
     let rpc_client = RpcClient::new(config.json_rpc_url.clone());
     let epoch_info = rpc_client.get_epoch_info()?;
@@ -508,7 +515,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
             if !config.dry_run {
                 datapoint_info!(
                     "validator-status",
-                    ("cluster", config.metrics_cluster_name, String),
+                    ("cluster", config.cluster_name, String),
                     ("id", node_pubkey.to_string(), String),
                     ("slot", epoch_info.absolute_slot, i64),
                     ("ok", true, bool)
@@ -618,7 +625,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
 
                 datapoint_info!(
                     "validator-status",
-                    ("cluster", config.metrics_cluster_name, String),
+                    ("cluster", config.cluster_name, String),
                     ("id", node_pubkey.to_string(), String),
                     ("slot", epoch_info.absolute_slot, i64),
                     ("ok", false, bool)
@@ -628,7 +635,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
                 if !config.dry_run {
                     datapoint_info!(
                         "validator-status",
-                        ("cluster", config.metrics_cluster_name, String),
+                        ("cluster", config.cluster_name, String),
                         ("id", node_pubkey.to_string(), String),
                         ("slot", epoch_info.absolute_slot, i64),
                         ("ok", true, bool)
@@ -663,7 +670,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
         )?;
 
         let mut abort = false;
-        for (success, memo) in confirmations {
+        for (success, signature, memo) in confirmations {
             if success {
                 info!("OK - {}", memo);
             } else {
@@ -687,8 +694,10 @@ fn main() -> Result<(), Box<dyn error::Error>> {
         delegate_stake_transactions,
         &config.authorized_staker,
     )?;
-    for (success, memo) in confirmations {
-        info!("{} - {}", if success { "OK" } else { "FAILED" }, memo);
+    for (success, signature, memo) in confirmations {
+        let msg = format!("{} - {}", if success { "OK" } else { "FAILED" }, memo);
+        notifier.send(&msg);
+        info!("{}", msg);
     }
 
     Ok(())

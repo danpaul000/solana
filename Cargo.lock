@@ -4812,6 +4812,7 @@ dependencies = [
  "solana-client",
  "solana-logger",
  "solana-metrics",
+ "solana-notifier",
  "solana-sdk",
  "solana-stake-program",
 ]
