@@ -31,6 +31,14 @@ use std::{
     str::FromStr,
     sync::Arc,
 };
+use csv::{
+    WriterBuilder,
+    Writer,
+};
+use serde::{
+    Serialize,
+    Deserialize,
+};
 
 use log::*;
 
@@ -38,6 +46,63 @@ use log::*;
 enum LedgerOutputMethod {
     Print,
     Json,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default, PartialEq)]
+struct EntryInfo {
+    index: usize,
+    num_hashes: u64,
+    hash: String,
+    num_transactions: usize,
+}
+
+fn output_slot_to_csv(
+    blockstore: &Blockstore,
+    slot: Slot,
+    wtr: &mut Writer<File>,
+) -> Result<(), String> {
+//    println!("Slot Meta {:?}", blockstore.meta(slot));
+    let entries = blockstore
+        .get_slot_entries(slot, 0, None)
+        .map_err(|err| format!("Failed to load entries for slot {}: {}", slot, err))?;
+
+    for (entry_index, entry) in entries.iter().enumerate() {
+        let entry_info = EntryInfo {
+            index: entry_index,
+            num_hashes: entry.num_hashes,
+            hash: entry.hash.to_string(),
+            num_transactions: entry.transactions.len(),
+        };
+        wtr.serialize(&entry_info);
+        wtr.flush();
+//        println!(
+//            "  Entry {} - num_hashes: {}, hashes: {}, transactions: {}",
+//            entry_index,
+//            entry.num_hashes,
+//            entry.hash,
+//            entry.transactions.len()
+//        );
+//        for (transactions_index, transaction) in entry.transactions.iter().enumerate() {
+//            println!("    Transaction {}", transactions_index);
+//            let transaction_status = blockstore
+//                .read_transaction_status((transaction.signatures[0], slot))
+//                .unwrap_or_else(|err| {
+//                    eprintln!(
+//                        "Failed to read transaction status for {} at slot {}: {}",
+//                        transaction.signatures[0], slot, err
+//                    );
+//                    None
+//                })
+//                .map(|transaction_status| transaction_status.into());
+//
+//            solana_cli::display::println_transaction(
+//                &transaction,
+//                &transaction_status,
+//                "      ",
+//            );
+//        }
+    }
+    Ok(())
 }
 
 fn output_slot_rewards(
@@ -623,6 +688,11 @@ fn main() {
         .takes_value(true)
         .default_value(&default_genesis_archive_unpacked_size)
         .help("maximum total uncompressed size of unpacked genesis archive");
+    let csv_file_arg = Arg::with_name("csv_file")
+        .long("csv-file")
+        .value_name("PATH")
+        .takes_value(true)
+        .help("File path to new or existing CSV file for writing");
 
     let matches = App::new(crate_name!())
         .about(crate_description!())
@@ -654,6 +724,21 @@ fn main() {
                     .required(true)
                     .help("Slots to print"),
             )
+        )
+        .subcommand(
+            SubCommand::with_name("slot-csv")
+                .about("Print the contents of one or more slots into a CSV file")
+                .arg(
+                    Arg::with_name("slots")
+                        .index(1)
+                        .value_name("SLOTS")
+                        .validator(is_slot)
+                        .takes_value(true)
+                        .multiple(true)
+                        .required(true)
+                        .help("Slots to print"),
+                )
+                .arg(&csv_file_arg)
         )
         .subcommand(
             SubCommand::with_name("set-dead-slot")
@@ -908,6 +993,18 @@ fn main() {
             for slot in slots {
                 println!("Slot {}", slot);
                 if let Err(err) = output_slot(&blockstore, slot, &LedgerOutputMethod::Print) {
+                    eprintln!("{}", err);
+                }
+            }
+        }
+        ("slot-csv", Some(arg_matches)) => {
+            let slots = values_t_or_exit!(arg_matches, "slots", Slot);
+            let blockstore = open_blockstore(&ledger_path);
+            let csv_file = value_t_or_exit!(arg_matches, "csv_file", String);
+            let mut wtr = csv::WriterBuilder::new().from_path(csv_file).unwrap();
+            for slot in slots {
+                println!("Slot {}", slot);
+                if let Err(err) = output_slot_to_csv(&blockstore, slot, &mut wtr) {
                     eprintln!("{}", err);
                 }
             }
