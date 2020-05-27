@@ -4253,6 +4253,7 @@ dependencies = [
  "bs58 0.3.1",
  "bytecount",
  "clap",
+ "csv",
  "histogram",
  "serde_json",
  "serde_yaml",

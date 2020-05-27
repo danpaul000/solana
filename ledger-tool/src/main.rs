@@ -31,10 +31,13 @@ use std::{
     str::FromStr,
 };
 
+use csv::WriterBuilder;
+
 #[derive(PartialEq)]
 enum LedgerOutputMethod {
     Print,
     Json,
+    Csv,
 }
 
 fn output_slot_rewards(
@@ -68,6 +71,7 @@ fn output_slot(
     slot: Slot,
     allow_dead_slots: bool,
     method: &LedgerOutputMethod,
+    csv_file: Option<String>,
 ) -> Result<(), String> {
     if blockstore.is_dead(slot) {
         if allow_dead_slots {
@@ -123,6 +127,10 @@ fn output_slot(
                 serde_json::to_writer(stdout(), &entry).expect("serialize entry");
                 stdout().write_all(b",\n").expect("newline");
             }
+            LedgerOutputMethod::Csv => {
+                println!("in CSV, Slot Meta {:?}", blockstore.meta(slot));
+                break;
+            }
         }
     }
 
@@ -134,6 +142,7 @@ fn output_ledger(
     starting_slot: Slot,
     allow_dead_slots: bool,
     method: LedgerOutputMethod,
+    csv_file: Option<String>,
 ) {
     let rooted_slot_iterator =
         RootedSlotIterator::new(starting_slot, &blockstore).unwrap_or_else(|err| {
@@ -155,9 +164,10 @@ fn output_ledger(
                 serde_json::to_writer(stdout(), &slot_meta).expect("serialize slot_meta");
                 stdout().write_all(b",\n").expect("newline");
             }
+            LedgerOutputMethod::Csv => ()
         }
 
-        if let Err(err) = output_slot(&blockstore, slot, allow_dead_slots, &method) {
+        if let Err(err) = output_slot(&blockstore, slot, allow_dead_slots, &method, None) {
             eprintln!("{}", err);
         }
     }
@@ -629,6 +639,11 @@ fn main() {
         .takes_value(true)
         .default_value(&default_genesis_archive_unpacked_size)
         .help("maximum total uncompressed size of unpacked genesis archive");
+    let csv_file_arg = Arg::with_name("csv_file")
+        .long("csv-file")
+        .value_name("PATH")
+        .takes_value(true)
+        .help("File path to new or existing CSV file for writing");
 
     let matches = App::new(crate_name!())
         .about(crate_description!())
@@ -649,6 +664,13 @@ fn main() {
             .arg(&allow_dead_slots_arg)
         )
         .subcommand(
+            SubCommand::with_name("csv")
+                .about("Write the ledger to a CSV file")
+                .arg(&starting_slot_arg)
+                .arg(&allow_dead_slots_arg)
+                .arg(&csv_file_arg)
+        )
+        .subcommand(
             SubCommand::with_name("slot")
             .about("Print the contents of one or more slots")
             .arg(
@@ -662,6 +684,22 @@ fn main() {
                     .help("Slots to print"),
             )
             .arg(&allow_dead_slots_arg)
+        )
+        .subcommand(
+            SubCommand::with_name("slot-csv")
+                .about("Print the contents of one or more slots into a CSV file")
+                .arg(
+                    Arg::with_name("slots")
+                        .index(1)
+                        .value_name("SLOTS")
+                        .validator(is_slot)
+                        .takes_value(true)
+                        .multiple(true)
+                        .required(true)
+                        .help("Slots to print"),
+                )
+                .arg(&allow_dead_slots_arg)
+                .arg(&csv_file_arg)
         )
         .subcommand(
             SubCommand::with_name("set-dead-slot")
@@ -866,6 +904,19 @@ fn main() {
                 starting_slot,
                 allow_dead_slots,
                 LedgerOutputMethod::Print,
+                None,
+            );
+        }
+        ("csv", Some(arg_matches)) => {
+            let starting_slot = value_t_or_exit!(arg_matches, "starting_slot", Slot);
+            let allow_dead_slots = arg_matches.is_present("allow_dead_slots");
+            let csv_file = value_t_or_exit!(arg_matches, "csv_file", String);
+            output_ledger(
+                open_blockstore(&ledger_path),
+                starting_slot,
+                allow_dead_slots,
+                LedgerOutputMethod::Csv,
+                Some(csv_file),
             );
         }
         ("genesis", Some(arg_matches)) => {
@@ -912,6 +963,26 @@ fn main() {
                     slot,
                     allow_dead_slots,
                     &LedgerOutputMethod::Print,
+                    None,
+                ) {
+                    eprintln!("{}", err);
+                }
+            }
+        }
+        ("slot-csv", Some(arg_matches)) => {
+            let slots = values_t_or_exit!(arg_matches, "slots", Slot);
+            let allow_dead_slots = arg_matches.is_present("allow_dead_slots");
+            let blockstore = open_blockstore(&ledger_path);
+            let csv_file = value_t_or_exit!(arg_matches, "csv_file", String);
+            for slot in slots {
+                let file = &csv_file;
+                println!("Slot {}", slot);
+                if let Err(err) = output_slot(
+                    &blockstore,
+                    slot,
+                    allow_dead_slots,
+                    &LedgerOutputMethod::Csv,
+                    Some(file.to_string()),
                 ) {
                     eprintln!("{}", err);
                 }
@@ -925,6 +996,7 @@ fn main() {
                 starting_slot,
                 allow_dead_slots,
                 LedgerOutputMethod::Json,
+                None,
             );
         }
         ("set-dead-slot", Some(arg_matches)) => {
