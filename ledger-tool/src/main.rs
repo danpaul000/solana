@@ -882,6 +882,7 @@ fn main() {
                 .arg(&starting_slot_arg)
                 .arg(&transaction_csv_file_arg)
                 .arg(&instruction_csv_file_arg)
+                .arg(&max_genesis_archive_unpacked_size_arg)
         )
         .subcommand(
             SubCommand::with_name("slot")
@@ -912,6 +913,7 @@ fn main() {
                 )
                 .arg(&transaction_csv_file_arg)
                 .arg(&instruction_csv_file_arg)
+                .arg(&max_genesis_archive_unpacked_size_arg)
         )
         .subcommand(
             SubCommand::with_name("set-dead-slot")
