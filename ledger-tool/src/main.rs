@@ -47,7 +47,6 @@ use serde::{
 };
 
 use log::*;
-use base64;
 
 #[derive(PartialEq)]
 enum LedgerOutputMethod {
@@ -98,7 +97,7 @@ fn output_slot_to_csv(
     genesis_creation_time: &i64,
 ) -> Result<(), String> {
     let entries = blockstore
-        .get_slot_entries(slot, 0, None)
+        .get_slot_entries(slot, 0)
         .map_err(|err| format!("Failed to load entries for slot {}: {}", slot, err))?;
 
     for entry in entries {
@@ -302,7 +301,7 @@ fn output_slot(
 }
 
 fn output_ledger_to_csv(blockstore: &Blockstore,
-                        ledger_path: &PathBuf,
+                        genesis_config: &GenesisConfig,
                         starting_slot: Slot,
                         transaction_csv_file: String,
                         instruction_csv_file: String) {
@@ -315,7 +314,7 @@ fn output_ledger_to_csv(blockstore: &Blockstore,
             exit(1);
         });
 
-    let genesis_creation_time = open_genesis_config(&ledger_path).creation_time;
+    let genesis_creation_time = genesis_config.creation_time;
 
     let mut transaction_writer = csv::WriterBuilder::new()
         .has_headers(false)
@@ -846,7 +845,7 @@ fn main() {
         .default_value(&default_genesis_archive_unpacked_size)
         .help("maximum total uncompressed size of unpacked genesis archive");
     let csv_file_arg = Arg::with_name("csv_file")
-        .long("csv-file")
+        .long("csv-file");
     let transaction_csv_file_arg = Arg::with_name("transaction_csv_file")
         .short("t")
         .long("transaction-csv-file")
@@ -1126,10 +1125,11 @@ fn main() {
             let starting_slot = value_t_or_exit!(arg_matches, "starting_slot", Slot);
             let transaction_csv_file = value_t_or_exit!(arg_matches, "transaction_csv_file", String);
             let instruction_csv_file = value_t_or_exit!(arg_matches, "instruction_csv_file", String);
-            let blockstore = open_blockstore(&ledger_path);
+            let blockstore = open_blockstore(&ledger_path, AccessType::TryPrimaryThenSecondary);
+            let genesis_config = open_genesis_config_by(&ledger_path, arg_matches);
             output_ledger_to_csv(
                 &blockstore,
-                &ledger_path,
+                &genesis_config,
                 starting_slot,
                 transaction_csv_file,
                 instruction_csv_file,
@@ -1186,10 +1186,10 @@ fn main() {
         }
         ("slot-csv", Some(arg_matches)) => {
             let slots = values_t_or_exit!(arg_matches, "slots", Slot);
-            let blockstore = open_blockstore(&ledger_path);
+            let blockstore = open_blockstore(&ledger_path, AccessType::TryPrimaryThenSecondary);
             let transaction_csv_file = value_t_or_exit!(arg_matches, "transaction_csv_file", String);
             let instruction_csv_file = value_t_or_exit!(arg_matches, "instruction_csv_file", String);
-            let genesis_creation_time = open_genesis_config(&ledger_path).creation_time;
+            let genesis_creation_time = open_genesis_config_by(&ledger_path, arg_matches).creation_time;
             let mut transaction_writer = csv::WriterBuilder::new()
                 .has_headers(false)
                 .flexible(true)
