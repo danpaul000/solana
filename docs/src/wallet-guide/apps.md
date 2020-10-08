@@ -35,23 +35,4 @@ viewed at any later time in the app by following these steps:
 [Coin98](https://coin98.app/) is an app available for iOS and Android and can
 be used to send and receive SOL tokens.
 
-<<<<<<< HEAD
-## Ledger Live with Ledger Nano S
-
-[Ledger Live](https://www.ledger.com/ledger-live) is available as free desktop
-software and as a free app for iOS and Android. It is used to manage apps and
-crypto accounts on a Ledger _hardware wallet_, which must be purchased
-separately and connected to the device running Ledger Live.
-
-[Ledger Nano S](https://shop.ledger.com/products/ledger-nano-s) is a
-hardware wallet which stores the wallet's private keys on a secure device that
-is physically separate from the computer, and connects via USB cable.
-This provides an extra level of security but requires the user to purchase and
-keep track of the hardware device.
-
-Solana does not support the Ledger Nano **X** at this time.
-
-[Ledger Live](ledger-live.md)
-=======
 *Note: Coin98 does not support stake accounts or staking operations*
->>>>>>> 0571882b1... Add new wallets to docs, clean up existing structure (#12655)
